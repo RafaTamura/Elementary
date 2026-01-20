@@ -1,2 +1,5 @@
 # macOS specific files
 .DS_Store
+echo "Elementary" >> .gitignore
+echo "*.exe" >> .gitignore
+echo "*.txt" >> .gitignore  

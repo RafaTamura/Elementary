@@ -22,14 +22,14 @@ func RunSherlock(p *tea.Program, username string) tea.Cmd {
 			if p == nil {
 				return
 			}
-
 			_, err := exec.LookPath("sherlock")
 			if err != nil {
-				p.Send(SherlockErrorMsg{Err: fmt.Errorf("sherlock não encontrado no PATH. Instale com 'pipx install sherlock-project'")})
+				p.Send(SherlockErrorMsg{Err: fmt.Errorf("sherlock não encontrado. Instale: pipx install sherlock-project")})
 				return
 			}
 
-			cmd := exec.Command("sherlock", username)
+			cmd := exec.Command("sherlock", username, "--timeout", "60", "--nsfw")
+
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
 				p.Send(SherlockErrorMsg{Err: err})

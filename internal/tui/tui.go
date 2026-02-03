@@ -12,21 +12,60 @@ import (
 	lipgloss "github.com/charmbracelet/lipgloss"
 )
 
-// --- ESTILOS GLOBAIS  ---
+// --- CONFIGURAÇÃO VISUAL ---
+
+const logoASCII = `
+
+  _____ _                           _                  
+ | ____| | ___ _ __ ___   ___ _ __ | |_ __ _ _ __ _   _ 
+ |  _| | |/ _ \ '_ ' _ \ / _ \ '_ \| __/ _' | '__| | | |
+ | |___| |  __/ | | | | |  __/ | | | || (_| | |  | |_| |
+ |_____|_|\___|_| |_| |_|\___|_| |_|\__\__,_|_|   \__, |
+                                                  |___/ `
+
 var (
-	stylePlus  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	styleSite  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
-	styleURL   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Background(lipgloss.Color("#7D56F4")).
+	// Cores
+	colorPurple = lipgloss.Color("#7D56F4") // Roxo Principal
+	colorGreen  = lipgloss.Color("#04B575") // Sucesso/Encontrado
+	colorRed    = lipgloss.Color("#FF2E7E") // Erro
+	colorGray   = lipgloss.Color("#626262") // Texto secundário
+	colorBg     = lipgloss.Color("#282828") // Fundo de barras
+
+	// Estilos dos Resultados
+	stylePlus = lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
+	styleSite = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
+	styleURL  = lipgloss.NewStyle().Foreground(colorGray).Italic(true)
+
+	// Estilo do Logo
+	logoStyle = lipgloss.NewStyle().
+			Foreground(colorPurple).
 			Bold(true).
-			Padding(0, 1).
+			PaddingTop(5).
+			MarginBottom(0)
+
+	// Estilo do Subtítulo
+	subTitleStyle = lipgloss.NewStyle().
+			Foreground(colorGray).
+			Italic(true).
 			MarginBottom(1)
-	headerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Background(lipgloss.Color("63")).Padding(0, 1).Bold(true)
-	footerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#767676"))
-	borderStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(0, 1)
-	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(true)
+
+	// Estilo da Barra de Status/Input
+	headerBaseStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			Bold(true).
+			Foreground(lipgloss.Color("#FFFFFF"))
+
+	// Estilo da Caixa de Resultados
+	borderStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorPurple).
+			Padding(0, 1)
+
+	// Estilo de Erro
+	errorStyle = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+
+	// Rodapé
+	footerStyle = lipgloss.NewStyle().Foreground(colorGray)
 )
 
 type SetProgramMsg struct {
@@ -47,17 +86,18 @@ type Model struct {
 
 func NewModel() Model {
 	ti := textinput.New()
-	ti.Placeholder = "Digite o usuário..."
+	ti.Placeholder = "Digite o username alvo..."
 	ti.Focus()
 	ti.CharLimit = 156
-	ti.Width = 50
+	ti.Width = 40
 
+	// Spinner
 	s := spinner.New()
-	s.Spinner = spinner.Pulse
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(colorGreen)
 
 	vp := viewport.New(100, 5)
-	vp.SetContent("Os resultados aparecerão aqui...")
+	vp.SetContent(lipgloss.NewStyle().Foreground(colorGray).Render("Aguardando comando..."))
 
 	return Model{
 		TextInput: ti,
@@ -87,13 +127,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 
 			case tea.KeyEnter:
-				if m.Program != nil {
+				if m.Program != nil && m.TextInput.Value() != "" {
 					m.IsLoading = true
 					m.LogPath = ""
 					m.ErrorMsg = ""
 					m.Results = []string{}
 					m.RawResults = []string{}
-					m.Viewport.SetContent("Iniciando investigação...")
+
+					m.Viewport.SetContent(fmt.Sprintf("%s Inicializando sherlock...", m.Spinner.View()))
 
 					cmdSherlock := commands.RunSherlock(m.Program, m.TextInput.Value())
 					cmds = append(cmds, cmdSherlock, m.Spinner.Tick)
@@ -124,10 +165,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			finalLine := cleanLine
 			if len(parts) == 2 {
 				siteName := strings.TrimPrefix(parts[0], "[+] ")
+
 				finalLine = lipgloss.JoinHorizontal(lipgloss.Left,
-					stylePlus.Render("[+] "),
-					styleSite.Render(siteName+": "),
-					styleURL.Render(parts[1]),
+					stylePlus.Render("✓ "),
+					styleSite.Render(siteName),
+					styleURL.Render(" -> "+parts[1]),
 				)
 			}
 			m.Results = append(m.Results, finalLine)
@@ -138,14 +180,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commands.SearchFinishedMsg:
 		m.IsLoading = false
-		m.Viewport.SetContent(strings.Join(m.Results, "\n") + "\n\n--- Investigação Finalizada ---")
+		m.Viewport.SetContent(strings.Join(m.Results, "\n") + "\n\n" + stylePlus.Render("--- FIM DA INVESTIGAÇÃO ---"))
 		cmdSave := commands.SaveLog(m.TextInput.Value(), m.RawResults)
 		cmds = append(cmds, cmdSave)
 
 	case commands.SherlockErrorMsg:
 		m.IsLoading = false
 		m.ErrorMsg = msg.Err.Error()
-		m.Viewport.SetContent(errorStyle.Render("ERRO: " + m.ErrorMsg))
+		m.Viewport.SetContent(errorStyle.Render("ERRO CRÍTICO: " + m.ErrorMsg))
 
 	case commands.LogSavedMsg:
 		m.LogPath = msg.Path
@@ -157,52 +199,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		headerHeight := 2
+		headerHeight := 9
 		footerHeight := 2
 		verticalMargin := headerHeight + footerHeight
 
 		if msg.Height > verticalMargin {
-			m.Viewport.Height = msg.Height - verticalMargin - 2
+			m.Viewport.Height = msg.Height - verticalMargin
 		} else {
 			m.Viewport.Height = 5
 		}
+
 		m.Viewport.Width = msg.Width
-		headerStyle.Width(msg.Width)
+		headerBaseStyle.Width(msg.Width)
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
-	var header string
+	logo := logoStyle.Render(logoASCII)
+	subTitle := subTitleStyle.Render("v2.0 • Sherlock Tool")
 
-	title := titleStyle.Render("ELEMENTARY")
+	var statusBar string
 
 	if m.IsLoading {
-		header = headerStyle.Render(fmt.Sprintf("%s Investigando por '%s'...", m.Spinner.View(), m.TextInput.Value()))
+		statusBar = headerBaseStyle.
+			Background(colorPurple).
+			Render(fmt.Sprintf("%s INVESTIGANDO: %s", m.Spinner.View(), strings.ToUpper(m.TextInput.Value())))
 	} else {
 		if m.ErrorMsg != "" {
-			header = headerStyle.Background(lipgloss.Color("#FF0000")).Render("Elementary - ERRO")
+			statusBar = headerBaseStyle.
+				Background(colorRed).
+				Render(" ⚠ SISTEMA INTERROMPIDO ")
 		} else {
-			header = headerStyle.Render("Elementary OSINT")
+			label := " ALVO > "
 			if m.TextInput.Focused() {
-				header = headerStyle.Render(fmt.Sprintf("Busca: %s", m.TextInput.View()))
+				statusBar = headerBaseStyle.
+					Background(colorBg).
+					Render(label + m.TextInput.View())
 			}
 		}
 	}
 
-	content := borderStyle.Render(m.Viewport.View())
+	content := borderStyle.
+		Width(m.Viewport.Width - 2).
+		Render(m.Viewport.View())
 
-	footerText := "Esc para sair • Setas para navegar"
+	footerText := "ESC: Sair • Setas: Navegar"
 	if m.LogPath != "" {
-		footerText = fmt.Sprintf("Log salvo: %s | %s", m.LogPath, footerText)
+		footerText = fmt.Sprintf("RELATÓRIO SALVO: %s | %s", m.LogPath, footerText)
 	}
-
 	footer := footerStyle.Render(footerText)
 
 	return lipgloss.JoinVertical(lipgloss.Left,
-		title,
-		header,
+		logo,
+		subTitle,
+		statusBar,
 		content,
 		footer,
 	)
